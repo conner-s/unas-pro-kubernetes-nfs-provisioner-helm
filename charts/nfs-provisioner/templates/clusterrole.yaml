@@ -9,11 +9,6 @@ rules:
     resources:
       - persistentvolumes
       - persistentvolumeclaims
-      - nodes
-      - pods
-      - services
-      - endpoints
-      - events
     verbs:
       - get
       - list
@@ -22,6 +17,12 @@ rules:
       - update
       - patch
       - delete
+  - apiGroups: [""]
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
   - apiGroups: ["storage.k8s.io"]
     resources:
       - storageclasses

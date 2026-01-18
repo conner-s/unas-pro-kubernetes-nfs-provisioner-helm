@@ -24,6 +24,10 @@ storageClass:
   archiveOnDelete: "true"
   # Reclaim policy for PVs (Retain or Delete)
   reclaimPolicy: Retain
+  # Volume binding mode (Immediate or WaitForFirstConsumer)
+  volumeBindingMode: Immediate
+  # Allow volume expansion
+  allowVolumeExpansion: true
   # Mount options for NFS (UNAS Pro requires nfsvers=3 and nolock)
   mountOptions:
     - nfsvers=3
@@ -37,14 +41,51 @@ serviceAccount:
 # Deployment configuration
 replicaCount: 1
 
+# Update strategy for the deployment
+strategy:
+  type: Recreate
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+# Liveness probe configuration
+livenessProbe: {}
+# Example:
+#   httpGet:
+#     path: /healthz
+#     port: 8080
+#   initialDelaySeconds: 10
+#   periodSeconds: 30
+
+# Readiness probe configuration
+readinessProbe: {}
+# Example:
+#   httpGet:
+#     path: /healthz
+#     port: 8080
+#   initialDelaySeconds: 5
+#   periodSeconds: 10
+
 # Resource limits and requests
-resources: {}
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
 
 # Node selector for pod scheduling
 nodeSelector: {}

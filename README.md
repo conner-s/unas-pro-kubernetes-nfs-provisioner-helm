@@ -87,9 +87,16 @@ The following table lists the configurable parameters of the chart:
 | `storageClass.defaultClass` | Set as default storage class | `true` |
 | `storageClass.archiveOnDelete` | Archive PVs on delete | `"true"` |
 | `storageClass.reclaimPolicy` | Reclaim policy for PVs | `Retain` |
+| `storageClass.volumeBindingMode` | Volume binding mode | `Immediate` |
+| `storageClass.allowVolumeExpansion` | Allow volume expansion | `true` |
 | `storageClass.mountOptions` | NFS mount options | `["nfsvers=3", "nolock"]` |
 | `replicaCount` | Number of provisioner replicas | `1` |
-| `resources` | CPU/Memory resource requests/limits | `{}` |
+| `strategy.type` | Deployment update strategy | `Recreate` |
+| `podSecurityContext` | Pod security context | See values.yaml |
+| `securityContext` | Container security context | See values.yaml |
+| `livenessProbe` | Liveness probe configuration | `{}` |
+| `readinessProbe` | Readiness probe configuration | `{}` |
+| `resources` | CPU/Memory resource requests/limits | See values.yaml |
 | `nodeSelector` | Node labels for pod scheduling | `{}` |
 | `tolerations` | Pod tolerations | `[]` |
 | `affinity` | Pod affinity rules | `{}` |

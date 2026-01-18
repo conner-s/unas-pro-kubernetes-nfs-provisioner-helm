@@ -10,6 +10,8 @@ provisioner: {{ .Values.provisionerName }}
 parameters:
   archiveOnDelete: {{ .Values.storageClass.archiveOnDelete | quote }}
 reclaimPolicy: {{ .Values.storageClass.reclaimPolicy }}
+volumeBindingMode: {{ .Values.storageClass.volumeBindingMode }}
+allowVolumeExpansion: {{ .Values.storageClass.allowVolumeExpansion }}
 {{- if .Values.storageClass.mountOptions }}
 mountOptions:
   {{- range .Values.storageClass.mountOptions }}

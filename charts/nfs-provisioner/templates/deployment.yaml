@@ -7,6 +7,8 @@ metadata:
     {{- include "nfs-provisioner.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: {{ .Values.strategy.type }}
   selector:
     matchLabels:
       {{- include "nfs-provisioner.selectorLabels" . | nindent 6 }}
@@ -16,10 +18,18 @@ spec:
         {{- include "nfs-provisioner.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "nfs-provisioner.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: nfs-client-provisioner
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: nfs-client-root
               mountPath: /persistentvolumes
@@ -30,6 +40,14 @@ spec:
               value: {{ .Values.nfs.server | quote }}
             - name: NFS_PATH
               value: {{ .Values.nfs.path | quote }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
