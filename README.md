@@ -1,29 +1,100 @@
 # unas-pro-kubernetes-nfs-provisioner
 A Kubernetes NFS provisioner compatible with the UNAS Pro and Hashicorp Vault.
 
-First add the ip-adress of your UNAS Pro drive to `deployment.yml`.
-This can be found within the topology in the Unifi web UI.
-Also add the folder names of your shared drives and potentially subfolders.
+## Prerequisites
 
-Please make sure you also added every ip-adress of your cluster nodes to the
+Please make sure you have added every IP address of your cluster nodes to the
 UNAS Pro. This can be done in the web UI of the drive under:
 
 ```text 
 Settings > Services > Add NFS connections
 ```
 
-Then apply kubernetes files:
+You will also need the IP address of your UNAS Pro drive (found in the Unifi web UI topology)
+and the path to your NFS share (e.g., `/var/nfs/shared/<folder>/<subfolder>/`).
+
+## Installation
+
+### Option 1: Using Helm (Recommended)
+
+Install the NFS provisioner using Helm:
 
 ```shell
-kubectl apply -f deployment.yml
-kubectl apply -f storage-class.yml
-kubectl apply -f service-account.yml
-kubectl apply -f cluster-role.yml
-kubectl apply -f clustor-role-binding.yml
+helm install nfs-provisioner ./charts/nfs-provisioner \
+  --set nfs.server=<ip-address-of-UNAS-Pro> \
+  --set nfs.path=/var/nfs/shared/<folder>/<subfolder>/
 ```
 
-After applying the Kubernetes resources a NFS client provisioner will start running on
+Or create a custom values file (`my-values.yaml`):
+
+```yaml
+nfs:
+  server: "192.168.1.100"
+  path: "/var/nfs/shared/kubernetes/data/"
+
+storageClass:
+  name: nfs-client
+  defaultClass: true
+```
+
+Then install with:
+
+```shell
+helm install nfs-provisioner ./charts/nfs-provisioner -f my-values.yaml
+```
+
+To install in a specific namespace:
+
+```shell
+helm install nfs-provisioner ./charts/nfs-provisioner \
+  --namespace storage \
+  --create-namespace \
+  --set nfs.server=<ip-address-of-UNAS-Pro> \
+  --set nfs.path=/var/nfs/shared/<folder>/<subfolder>/
+```
+
+### Option 2: Using kubectl (Manual)
+
+First add the IP address of your UNAS Pro drive to `deployment.yml`.
+Also add the folder names of your shared drives and potentially subfolders.
+
+Then apply Kubernetes files:
+
+```shell
+kubectl apply -f service-account.yml
+kubectl apply -f cluster-role.yml
+kubectl apply -f cluster-role-binding.yml
+kubectl apply -f storage-class.yml
+kubectl apply -f deployment.yml
+```
+
+After applying the Kubernetes resources, an NFS client provisioner will start running on
 your cluster.
+
+## Configuration Options
+
+The following table lists the configurable parameters of the chart:
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `nfs.server` | IP address of the UNAS Pro NFS server | `""` |
+| `nfs.path` | Path to the NFS share | `""` |
+| `image.repository` | Container image repository | `registry.k8s.io/sig-storage/nfs-subdir-external-provisioner` |
+| `image.tag` | Container image tag | `v4.0.2` |
+| `image.pullPolicy` | Container image pull policy | `IfNotPresent` |
+| `provisionerName` | Provisioner name for the storage class | `nfs.csi.k8s.io` |
+| `storageClass.name` | Name of the storage class | `nfs-client` |
+| `storageClass.defaultClass` | Set as default storage class | `true` |
+| `storageClass.archiveOnDelete` | Archive PVs on delete | `"true"` |
+| `storageClass.reclaimPolicy` | Reclaim policy for PVs | `Retain` |
+| `storageClass.mountOptions` | NFS mount options | `["nfsvers=3", "nolock"]` |
+| `replicaCount` | Number of provisioner replicas | `1` |
+| `resources` | CPU/Memory resource requests/limits | `{}` |
+| `nodeSelector` | Node labels for pod scheduling | `{}` |
+| `tolerations` | Pod tolerations | `[]` |
+| `affinity` | Pod affinity rules | `{}` |
+
+## Testing the Provisioner
 
 Try it out by installing the HashiCorp Vault. 
 Also see [HashiCorp documentation](https://developer.hashicorp.com/vault/docs/platform/k8s/helm)

@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nfs-provisioner.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nfs-provisioner.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nfs-provisioner.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nfs-provisioner.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "nfs-provisioner.serviceAccountName" . }}
+      containers:
+        - name: nfs-client-provisioner
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: nfs-client-root
+              mountPath: /persistentvolumes
+          env:
+            - name: PROVISIONER_NAME
+              value: {{ .Values.provisionerName }}
+            - name: NFS_SERVER
+              value: {{ .Values.nfs.server | quote }}
+            - name: NFS_PATH
+              value: {{ .Values.nfs.path | quote }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: nfs-client-root
+          nfs:
+            server: {{ .Values.nfs.server | quote }}
+            path: {{ .Values.nfs.path | quote }}
+            readOnly: false
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

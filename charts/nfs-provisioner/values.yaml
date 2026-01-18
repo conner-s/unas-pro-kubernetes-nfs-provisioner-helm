@@ -1,0 +1,56 @@
+# NFS Server configuration
+nfs:
+  # IP address of the UNAS Pro NFS server
+  server: ""
+  # Path to the NFS share (e.g., /var/nfs/shared/<folder>/<subfolder>/)
+  path: ""
+
+# Image configuration
+image:
+  repository: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner
+  tag: v4.0.2
+  pullPolicy: IfNotPresent
+
+# Provisioner name used by the storage class
+provisionerName: nfs.csi.k8s.io
+
+# Storage class configuration
+storageClass:
+  # Name of the storage class
+  name: nfs-client
+  # Set as the default storage class
+  defaultClass: true
+  # Archive PVs on delete instead of removing them
+  archiveOnDelete: "true"
+  # Reclaim policy for PVs (Retain or Delete)
+  reclaimPolicy: Retain
+  # Mount options for NFS (UNAS Pro requires nfsvers=3 and nolock)
+  mountOptions:
+    - nfsvers=3
+    - nolock
+
+# Service account configuration
+serviceAccount:
+  # Name of the service account
+  name: nfs-client-provisioner
+
+# Deployment configuration
+replicaCount: 1
+
+# Resource limits and requests
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Node selector for pod scheduling
+nodeSelector: {}
+
+# Tolerations for pod scheduling
+tolerations: []
+
+# Affinity rules for pod scheduling
+affinity: {}
