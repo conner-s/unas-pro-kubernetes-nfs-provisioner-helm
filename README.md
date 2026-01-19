@@ -1,145 +1,208 @@
-# unas-pro-kubernetes-nfs-provisioner
-A Kubernetes NFS provisioner compatible with the UNAS Pro and Hashicorp Vault.
+# UNAS Pro NFS Configuration for Kubernetes
+
+Guide for configuring the official [Kubernetes CSI NFS Driver](https://github.com/kubernetes-csi/csi-driver-nfs) to work with the UniFi UNAS Pro network storage device.
+
+> **Note:** This repository previously contained a custom Helm chart, but we now recommend using the official CSI driver which is actively maintained by Kubernetes SIG-Storage and provides additional features like volume snapshots, cloning, and proper volume expansion.
 
 ## Prerequisites
 
-Please make sure you have added every IP address of your cluster nodes to the
-UNAS Pro. This can be done in the web UI of the drive under:
+### 1. Configure UNAS Pro NFS Access
 
-```text 
+Add the IP addresses of all your Kubernetes cluster nodes to the UNAS Pro. This can be done in the UNAS Pro web UI:
+
+```
 Settings > Services > Add NFS connections
 ```
 
-You will also need the IP address of your UNAS Pro drive (found in the Unifi web UI topology)
-and the path to your NFS share (e.g., `/var/nfs/shared/<folder>/<subfolder>/`).
+### 2. Gather Required Information
+
+You will need:
+- **UNAS Pro IP address**: Found in the UniFi Network topology view
+- **NFS share path**: e.g., `/var/nfs/shared/<folder>/<subfolder>/`
 
 ## Installation
 
-### Option 1: Using Helm (Recommended)
-
-Install the NFS provisioner using Helm:
+### Step 1: Install the Official CSI NFS Driver
 
 ```shell
-helm install nfs-provisioner ./charts/nfs-provisioner \
-  --set nfs.server=<ip-address-of-UNAS-Pro> \
-  --set nfs.path=/var/nfs/shared/<folder>/<subfolder>/
+helm repo add csi-driver-nfs https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts
+helm repo update
+helm install csi-driver-nfs csi-driver-nfs/csi-driver-nfs \
+  --namespace kube-system \
+  --set driver.mountPermissions=0
 ```
 
-Or create a custom values file (`my-values.yaml`):
+### Step 2: Create a StorageClass for UNAS Pro
+
+Create a file named `storageclass-unas-pro.yaml`:
 
 ```yaml
-nfs:
-  server: "192.168.1.100"
-  path: "/var/nfs/shared/kubernetes/data/"
-
-storageClass:
-  name: nfs-client
-  defaultClass: true
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-unas-pro
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: <UNAS-PRO-IP-ADDRESS>
+  share: /var/nfs/shared/<folder>/<subfolder>/
+  # subDir: ""  # Optional: subdirectory under the share
+  # onDelete: retain  # Options: delete, retain, archive
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+mountOptions:
+  - nfsvers=3   # Required for UNAS Pro compatibility
+  - nolock      # Required for UNAS Pro compatibility
 ```
 
-Then install with:
+Apply the StorageClass:
 
 ```shell
-helm install nfs-provisioner ./charts/nfs-provisioner -f my-values.yaml
+kubectl apply -f storageclass-unas-pro.yaml
 ```
 
-To install in a specific namespace:
+## UNAS Pro-Specific Mount Options
 
-```shell
-helm install nfs-provisioner ./charts/nfs-provisioner \
-  --namespace storage \
-  --create-namespace \
-  --set nfs.server=<ip-address-of-UNAS-Pro> \
-  --set nfs.path=/var/nfs/shared/<folder>/<subfolder>/
+The UNAS Pro requires specific NFS mount options to function correctly:
+
+| Option | Description |
+|--------|-------------|
+| `nfsvers=3` | Use NFS version 3 protocol (required for UNAS Pro) |
+| `nolock` | Disable file locking (required for UNAS Pro) |
+
+These options are included in the StorageClass example above.
+
+## Example: Creating a PersistentVolumeClaim
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-nfs-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-unas-pro
+  resources:
+    requests:
+      storage: 10Gi
 ```
 
-### Option 2: Using kubectl (Manual)
+## Example: Using the PVC in a Pod
 
-First add the IP address of your UNAS Pro drive to `deployment.yml`.
-Also add the folder names of your shared drives and potentially subfolders.
-
-Then apply Kubernetes files:
-
-```shell
-kubectl apply -f service-account.yml
-kubectl apply -f cluster-role.yml
-kubectl apply -f cluster-role-binding.yml
-kubectl apply -f storage-class.yml
-kubectl apply -f deployment.yml
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-app
+spec:
+  containers:
+    - name: app
+      image: nginx
+      volumeMounts:
+        - name: nfs-storage
+          mountPath: /data
+  volumes:
+    - name: nfs-storage
+      persistentVolumeClaim:
+        claimName: my-nfs-pvc
 ```
 
-After applying the Kubernetes resources, an NFS client provisioner will start running on
-your cluster.
+## Testing with HashiCorp Vault
 
-## Configuration Options
-
-The following table lists the configurable parameters of the chart:
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `nfs.server` | IP address of the UNAS Pro NFS server | `""` |
-| `nfs.path` | Path to the NFS share | `""` |
-| `image.repository` | Container image repository | `registry.k8s.io/sig-storage/nfs-subdir-external-provisioner` |
-| `image.tag` | Container image tag | `v4.0.2` |
-| `image.pullPolicy` | Container image pull policy | `IfNotPresent` |
-| `provisionerName` | Provisioner name for the storage class | `nfs.csi.k8s.io` |
-| `storageClass.name` | Name of the storage class | `nfs-client` |
-| `storageClass.defaultClass` | Set as default storage class | `true` |
-| `storageClass.archiveOnDelete` | Archive PVs on delete | `"true"` |
-| `storageClass.reclaimPolicy` | Reclaim policy for PVs | `Retain` |
-| `storageClass.volumeBindingMode` | Volume binding mode | `Immediate` |
-| `storageClass.allowVolumeExpansion` | Allow volume expansion | `true` |
-| `storageClass.mountOptions` | NFS mount options | `["nfsvers=3", "nolock"]` |
-| `replicaCount` | Number of provisioner replicas | `1` |
-| `strategy.type` | Deployment update strategy | `Recreate` |
-| `podSecurityContext` | Pod security context | See values.yaml |
-| `securityContext` | Container security context | See values.yaml |
-| `livenessProbe` | Liveness probe configuration | `{}` |
-| `readinessProbe` | Readiness probe configuration | `{}` |
-| `resources` | CPU/Memory resource requests/limits | See values.yaml |
-| `nodeSelector` | Node labels for pod scheduling | `{}` |
-| `tolerations` | Pod tolerations | `[]` |
-| `affinity` | Pod affinity rules | `{}` |
-
-## Testing the Provisioner
-
-Try it out by installing the HashiCorp Vault. 
-Also see [HashiCorp documentation](https://developer.hashicorp.com/vault/docs/platform/k8s/helm)
+A good way to test your NFS provisioner is by installing HashiCorp Vault:
 
 ```shell
 helm repo add hashicorp https://helm.releases.hashicorp.com
-helm install vault hashicorp/vault
+helm install vault hashicorp/vault \
+  --set server.dataStorage.storageClass=nfs-unas-pro
 ```
 
-Now find the pod in your Kubernetes cluster in the namespace `default`.
-Shell into it and use the command:
+After installation, initialize Vault:
 
-```vault operator init```
-
-This will give you something like this:
-
-```text
-Unseal Key 1: <token>
-Unseal Key 2: <token>
-Unseal Key 3: <token>
-Unseal Key 4: <token>
-Unseal Key 5: <token>
-
-Initial Root Token: <token>
-
-Vault initialized with 5 key shares and a key threshold of 3. Please securely
-distribute the key shares printed above. When the Vault is re-sealed,
-restarted, or stopped, you must supply at least 3 of these keys to unseal it
-before it can start servicing requests.
-
-Vault does not store the generated root key. Without at least 3 keys to
-reconstruct the root key, Vault will remain permanently sealed!
-
-It is possible to generate new unseal keys, provided you have a quorum of
-existing unseal keys shares. See "vault operator rekey" for more information.
+```shell
+kubectl exec -it vault-0 -- vault operator init
 ```
 
-Store the keys and have fun!
+## Advanced Configuration
 
-PS: Shout out to woutceu for mentioning the mount options.
-https://community.ui.com/questions/NFS-File-shares-in-UNAS/fa03aa65-afec-4106-90bd-77c7b6e044c4#answer/bf4c757e-83c9-4870-8278-d006d1dbc19b
+### Static Provisioning (Pre-existing NFS Share)
+
+For using a specific existing directory on the NFS server:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-pv
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-unas-pro
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: unique-volume-id
+    volumeAttributes:
+      server: <UNAS-PRO-IP-ADDRESS>
+      share: /var/nfs/shared/<folder>/<subfolder>/
+  mountOptions:
+    - nfsvers=3
+    - nolock
+```
+
+### Volume Snapshots
+
+The official CSI driver supports volume snapshots. First, enable the snapshot controller:
+
+```shell
+helm upgrade csi-driver-nfs csi-driver-nfs/csi-driver-nfs \
+  --namespace kube-system \
+  --set externalSnapshotter.enabled=true
+```
+
+Create a VolumeSnapshotClass:
+
+```yaml
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: nfs-snapclass
+driver: nfs.csi.k8s.io
+deletionPolicy: Delete
+```
+
+## Why Use the Official CSI Driver?
+
+| Feature | Official csi-driver-nfs |
+|---------|------------------------|
+| Volume Snapshots | ✅ Supported |
+| Volume Cloning | ✅ Supported |
+| Volume Expansion | ✅ Full CSI support |
+| fsGroupPolicy | ✅ Supported |
+| Maintenance | Active (Kubernetes SIG-Storage) |
+| UNAS Pro Compatibility | ✅ Via mount options |
+
+## Troubleshooting
+
+### Mount fails with "access denied"
+- Verify the UNAS Pro has your node IPs added to NFS connections
+- Check firewall rules allow NFS traffic (ports 111, 2049)
+
+### "Stale file handle" errors
+- Ensure `nolock` mount option is present
+- Verify the NFS path exists on the UNAS Pro
+
+### Permission issues
+- Check the `mountPermissions` parameter in the CSI driver
+- Verify the NFS export permissions on the UNAS Pro
+
+## References
+
+- [Official CSI NFS Driver](https://github.com/kubernetes-csi/csi-driver-nfs)
+- [CSI Driver Parameters](https://github.com/kubernetes-csi/csi-driver-nfs/blob/master/docs/driver-parameters.md)
+- [UNAS Pro NFS Community Discussion](https://community.ui.com/questions/NFS-File-shares-in-UNAS/fa03aa65-afec-4106-90bd-77c7b6e044c4#answer/bf4c757e-83c9-4870-8278-d006d1dbc19b)
